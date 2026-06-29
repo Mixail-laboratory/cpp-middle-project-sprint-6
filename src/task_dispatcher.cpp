@@ -5,6 +5,7 @@
 #include "types.hpp"
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 
@@ -12,8 +13,8 @@ namespace dispatcher {
 
 std::unordered_map<TaskPriority, queue::QueueOptions> TaskDispatcher::default_config() {
     std::unordered_map<TaskPriority, queue::QueueOptions> config;
-    config[TaskPriority::High] = queue::QueueOptions(true, 1000);
-    config[TaskPriority::Normal] = queue::QueueOptions(false);
+    config[TaskPriority::High] = queue::QueueOptions{.bounded = true, .capacity = 1000};
+    config[TaskPriority::Normal] = queue::QueueOptions{.bounded = false, .capacity = std::nullopt};
     return config;
 }
 

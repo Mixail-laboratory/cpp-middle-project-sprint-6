@@ -7,11 +7,10 @@
 #include "task_dispatcher.hpp"
 #include "types.hpp"
 
-TEST(BasicCheck, SimpleCheck) { EXPECT_EQ(1 + 1, 2); }
-
 TEST(TaskDispatcher, ExecuteSimpleTask) {
-    dispatcher::TaskDispatcher dispatcher(2);
     std::atomic<int> counter(0);
+
+    dispatcher::TaskDispatcher dispatcher(2);
 
     dispatcher.schedule(dispatcher::TaskPriority::Normal, [&counter]() { counter++; });
 
@@ -29,7 +28,7 @@ TEST(TaskDispatcher, ExecuteMultipleTasks) {
         dispatcher.schedule(dispatcher::TaskPriority::Normal, [&counter]() { counter++; });
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     EXPECT_EQ(counter.load(), task_count);
 }

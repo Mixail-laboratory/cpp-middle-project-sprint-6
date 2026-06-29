@@ -23,6 +23,10 @@ PriorityQueue::PriorityQueue(const std::unordered_map<TaskPriority, QueueOptions
 }
 
 void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
+    std::println("push");
+    if (!is_active_.load(std::memory_order_acquire)) {
+        return;
+    }
     try {
         auto &queue = queue_map_.at(priority);
         queue->push(std::move(task));
@@ -33,10 +37,14 @@ void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
 }
 
 std::optional<std::function<void()>> PriorityQueue::pop() {
+    if (!is_active_.load(std::memory_order_acquire)) {
+        return std::nullopt;
+    }
     semaphore_.acquire();
     if (!is_active_.load(std::memory_order_acquire)) {
         return std::nullopt;
     }
+    std::println("pop");
     for (const auto &priority : {TaskPriority::High, TaskPriority::Normal}) {
         if (queue_map_.contains(priority)) {
             const auto task = queue_map_.at(priority)->try_pop();
@@ -45,12 +53,18 @@ std::optional<std::function<void()>> PriorityQueue::pop() {
             }
         }
     }
+    std::println("pop: no task found");
+
     return std::nullopt;
 };
 
 void PriorityQueue::shutdown() {
+    std::println("shutdown: start");
     is_active_.store(false, std::memory_order_relaxed);
-    semaphore_.release();
+    for (int i = 0; i < 100; ++i) {
+        semaphore_.release();
+    }
+    std::println("shutdown stop");
 }
 
 }  // namespace dispatcher::queue
