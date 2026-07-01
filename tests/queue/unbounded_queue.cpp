@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "queue/unbounded_queue.hpp"
+#include <thread>
 
 TEST(UnboundedQueue, PushAndPop) {
     dispatcher::queue::UnboundedQueue queue;
@@ -12,8 +13,8 @@ TEST(UnboundedQueue, PushAndPop) {
 TEST(UnboundedQueue, NoCapacityLimit) {
     dispatcher::queue::UnboundedQueue queue;
 
-    // ✅ Должна вместить любое количество
-    for (int i = 0; i < 1000; ++i) {
+    const auto count = 1000;
+    for (int i = 0; i < count; ++i) {
         queue.push([]() {});
     }
 
@@ -46,23 +47,20 @@ TEST(UnboundedQueue, MultiplePushPop) {
 TEST(UnboundedQueue, ThreadSafety) {
     dispatcher::queue::UnboundedQueue queue;
     std::atomic<int> counter(0);
+    {
+        std::jthread producer([&queue, &counter]() {
+            for (int i = 0; i < 100; ++i) {
+                queue.push([&counter]() { counter++; });
+            }
+        });
 
-    std::thread producer([&queue, &counter]() {
-        for (int i = 0; i < 100; ++i) {
-            queue.push([&counter]() { counter++; });
-        }
-    });
-
-    std::thread consumer([&queue]() {
-        for (int i = 0; i < 100; ++i) {
-            auto task = queue.try_pop();
-            if (task.has_value())
-                (*task)();
-        }
-    });
-
-    producer.join();
-    consumer.join();
-
+        std::jthread consumer([&queue]() {
+            for (int i = 0; i < 100; ++i) {
+                auto task = queue.try_pop();
+                if (task.has_value())
+                    (*task)();
+            }
+        });
+    }
     EXPECT_EQ(counter.load(), 100);
 }

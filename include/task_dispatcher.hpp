@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <print>
 #include <unordered_map>
 
 #include "queue/priority_queue.hpp"
@@ -15,14 +16,13 @@ class TaskDispatcher {
     std::unique_ptr<thread_pool::ThreadPool> thread_pool_;
 
 public:
-    TaskDispatcher(size_t thread_count,
-                   const std::unordered_map<TaskPriority, queue::QueueOptions> &option = default_config());
+    TaskDispatcher(size_t thread_count, const std::map<TaskPriority, queue::QueueOptions> &option = default_config());
 
     void schedule(TaskPriority priority, std::function<void()> task);
-    ~TaskDispatcher() = default;
+    ~TaskDispatcher() { queue_->shutdown(); };
 
 private:
-    static std::unordered_map<TaskPriority, queue::QueueOptions> default_config();
+    static std::map<TaskPriority, queue::QueueOptions> default_config();
 };
 
 }  // namespace dispatcher

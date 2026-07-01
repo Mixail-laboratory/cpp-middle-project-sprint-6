@@ -11,21 +11,22 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <print>
 #include <queue>
 #include <semaphore>
 #include <stdexcept>
+#include <thread>
 #include <unordered_map>
 
 namespace dispatcher::queue {
 
 class PriorityQueue {
-    std::binary_semaphore semaphore_;
-    std::priority_queue<std::function<void()>> queue_;
+    std::counting_semaphore<256> semaphore_;
     std::atomic<bool> is_active_ = true;
-    std::unordered_map<TaskPriority, std::shared_ptr<IQueue>> queue_map_;
+    std::map<TaskPriority, std::shared_ptr<IQueue>> queue_map_;
 
 public:
-    explicit PriorityQueue(const std::unordered_map<TaskPriority, QueueOptions> &options);
+    explicit PriorityQueue(const std::map<TaskPriority, QueueOptions> &options);
 
     void push(TaskPriority priority, std::function<void()> task);
     // block on pop until shutdown is called

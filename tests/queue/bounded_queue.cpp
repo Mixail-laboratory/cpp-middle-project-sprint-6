@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "queue/bounded_queue.hpp"
+#include <thread>
 
 TEST(BoundedQueue, PushAndPop) {
     dispatcher::queue::BoundedQueue queue(5);
@@ -35,23 +36,20 @@ TEST(BoundedQueue, MultiplePushPop) {
 TEST(BoundedQueue, ThreadSafety) {
     dispatcher::queue::BoundedQueue queue(100);
     std::atomic<int> counter(0);
+    {
+        std::jthread producer([&queue, &counter]() {
+            for (int i = 0; i < 50; ++i) {
+                queue.push([&counter]() { counter++; });
+            }
+        });
 
-    std::thread producer([&queue, &counter]() {
-        for (int i = 0; i < 50; ++i) {
-            queue.push([&counter]() { counter++; });
-        }
-    });
-
-    std::thread consumer([&queue]() {
-        for (int i = 0; i < 50; ++i) {
-            auto task = queue.try_pop();
-            if (task.has_value())
-                (*task)();
-        }
-    });
-
-    producer.join();
-    consumer.join();
-
+        std::jthread consumer([&queue]() {
+            for (int i = 0; i < 50; ++i) {
+                auto task = queue.try_pop();
+                if (task.has_value())
+                    (*task)();
+            }
+        });
+    }
     EXPECT_EQ(counter.load(), 50);
 }

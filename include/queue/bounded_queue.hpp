@@ -12,7 +12,6 @@ class BoundedQueue : public IQueue {
     size_t capacity_;
     std::mutex mutex_;
     std::condition_variable not_full_;
-    std::condition_variable not_empty_;
 
 public:
     explicit BoundedQueue(size_t capacity);
