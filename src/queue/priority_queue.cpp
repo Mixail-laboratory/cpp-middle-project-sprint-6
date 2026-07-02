@@ -8,6 +8,7 @@
 #include <optional>
 #include <print>
 #include <semaphore>
+#include <thread>
 
 namespace dispatcher::queue {
 
@@ -38,23 +39,31 @@ void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
 }
 
 std::optional<std::function<void()>> PriorityQueue::pop() {
-    for (const auto &[priority, queue] : queue_map_) {
-        const auto task = queue->try_pop();
-        if (task.has_value()) {
-            return task;
+    while (true) {
+        for (const auto &[priority, queue] : queue_map_) {
+            const auto task = queue->try_pop();
+            if (task.has_value()) {
+                return task;
+            }
         }
-    }
-    if (!is_active_.load(std::memory_order_acquire)) {
-        return std::nullopt;
-    }
-    semaphore_.acquire();
-    for (const auto &[priority, queue] : queue_map_) {
-        const auto task = queue->try_pop();
-        if (task.has_value()) {
-            return task;
+        if (!is_active_.load(std::memory_order_acquire)) {
+            for (const auto &[priority, queue] : queue_map_) {
+                const auto task = queue->try_pop();
+                if (task.has_value()) {
+                    return task;
+                }
+            }
+            return std::nullopt;
         }
+        semaphore_.acquire();
+        for (const auto &[priority, queue] : queue_map_) {
+            const auto task = queue->try_pop();
+            if (task.has_value()) {
+                return task;
+            }
+        }
+        std::this_thread::yield();
     }
-    return std::nullopt;
 };
 
 void PriorityQueue::shutdown() {
@@ -62,7 +71,7 @@ void PriorityQueue::shutdown() {
     while (pending_ops.load(std::memory_order_acquire) > 0) {
         std::this_thread::yield();
     }
-    for (int i = 0; i < semaphore_.max(); ++i) {
+    for (int i = 0; i < max_threads; ++i) {
         semaphore_.release();
     }
 }
