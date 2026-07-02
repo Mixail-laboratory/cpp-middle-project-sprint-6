@@ -22,7 +22,9 @@ PriorityQueue::PriorityQueue(const std::map<TaskPriority, QueueOptions> &options
 }
 
 void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
+    pending_ops.fetch_add(1, std::memory_order_acq_rel);
     if (!is_active_.load(std::memory_order_acquire)) {
+        pending_ops.fetch_sub(1, std::memory_order_acq_rel);
         return;
     }
     try {
@@ -32,6 +34,7 @@ void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
     } catch (const std::exception &ex) {
         std::print("{}", ex.what());
     }
+    pending_ops.fetch_sub(1, std::memory_order_acq_rel);
 }
 
 std::optional<std::function<void()>> PriorityQueue::pop() {
@@ -56,7 +59,10 @@ std::optional<std::function<void()>> PriorityQueue::pop() {
 
 void PriorityQueue::shutdown() {
     is_active_.store(false, std::memory_order_relaxed);
-    for (int i = 0; i < 256; ++i) {
+    while (pending_ops.load(std::memory_order_acquire) > 0) {
+        std::this_thread::yield();
+    }
+    for (int i = 0; i < semaphore_.max(); ++i) {
         semaphore_.release();
     }
 }

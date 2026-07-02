@@ -32,7 +32,6 @@ void ThreadPool::start() {
 }
 
 ThreadPool::~ThreadPool() {
-    stop.store(true, std::memory_order_release);
     queue_->shutdown();
     for (auto &worker : workers) {
         if (worker.joinable()) {

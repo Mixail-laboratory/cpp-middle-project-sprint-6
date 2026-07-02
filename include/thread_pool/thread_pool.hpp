@@ -9,7 +9,6 @@
 namespace dispatcher::thread_pool {
 
 class ThreadPool {
-    std::atomic<bool> stop = false;
     std::vector<std::jthread> workers;
     std::shared_ptr<queue::PriorityQueue> queue_;
     void start();
