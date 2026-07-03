@@ -10,13 +10,11 @@ namespace dispatcher::queue {
 
 void UnboundedQueue::push(std::function<void()> task) {
     std::unique_lock lock(mutex_);
-    queue_.push_front(std::move(task));
-    not_empty_.notify_all();
+    queue_.push_back(std::move(task));
 }
 
 std::optional<std::function<void()>> UnboundedQueue::try_pop() {
     std::unique_lock lock(mutex_);
-    not_empty_.wait(lock, [this] { return !queue_.empty(); });
 
     if (queue_.empty()) {
         return std::nullopt;

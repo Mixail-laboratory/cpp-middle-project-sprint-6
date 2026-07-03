@@ -8,11 +8,11 @@
 #include <optional>
 #include <print>
 #include <semaphore>
-#include <unordered_map>
+#include <thread>
 
 namespace dispatcher::queue {
 
-PriorityQueue::PriorityQueue(const std::unordered_map<TaskPriority, QueueOptions> &options) : semaphore_(0) {
+PriorityQueue::PriorityQueue(const std::map<TaskPriority, QueueOptions> &options) : semaphore_(0) {
     for (const auto &[priority, option] : options) {
         if (option.bounded) {
             queue_map_.try_emplace(priority, std::make_shared<BoundedQueue>(option.capacity.value()));
@@ -23,6 +23,11 @@ PriorityQueue::PriorityQueue(const std::unordered_map<TaskPriority, QueueOptions
 }
 
 void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
+    pending_ops.fetch_add(1, std::memory_order_acq_rel);
+    if (!is_active_.load(std::memory_order_acquire)) {
+        pending_ops.fetch_sub(1, std::memory_order_acq_rel);
+        return;
+    }
     try {
         auto &queue = queue_map_.at(priority);
         queue->push(std::move(task));
@@ -30,27 +35,45 @@ void PriorityQueue::push(TaskPriority priority, std::function<void()> task) {
     } catch (const std::exception &ex) {
         std::print("{}", ex.what());
     }
+    pending_ops.fetch_sub(1, std::memory_order_acq_rel);
 }
 
 std::optional<std::function<void()>> PriorityQueue::pop() {
-    semaphore_.acquire();
-    if (!is_active_.load(std::memory_order_acquire)) {
-        return std::nullopt;
-    }
-    for (const auto &priority : {TaskPriority::High, TaskPriority::Normal}) {
-        if (queue_map_.contains(priority)) {
-            const auto task = queue_map_.at(priority)->try_pop();
+    while (true) {
+        for (const auto &[priority, queue] : queue_map_) {
+            const auto task = queue->try_pop();
             if (task.has_value()) {
                 return task;
             }
         }
+        if (!is_active_.load(std::memory_order_acquire)) {
+            for (const auto &[priority, queue] : queue_map_) {
+                const auto task = queue->try_pop();
+                if (task.has_value()) {
+                    return task;
+                }
+            }
+            return std::nullopt;
+        }
+        semaphore_.acquire();
+        for (const auto &[priority, queue] : queue_map_) {
+            const auto task = queue->try_pop();
+            if (task.has_value()) {
+                return task;
+            }
+        }
+        std::this_thread::yield();
     }
-    return std::nullopt;
 };
 
 void PriorityQueue::shutdown() {
     is_active_.store(false, std::memory_order_relaxed);
-    semaphore_.release();
+    while (pending_ops.load(std::memory_order_acquire) > 0) {
+        std::this_thread::yield();
+    }
+    for (int i = 0; i < max_threads; ++i) {
+        semaphore_.release();
+    }
 }
 
 }  // namespace dispatcher::queue
